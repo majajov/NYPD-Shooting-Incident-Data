@@ -1,0 +1,162 @@
+---
+title: "NYPD Shooting Incident Data Report"
+author: "M. Jovanovski"
+date: "2023-03-17"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+### Libraries
+The most important library for analyzing and visualizing data is tidyverse. This library consists of many libraries that can be used for data analysis and data visualization. I will use dlpyr and ggplot2 functions to perform most of the data analysis and data visualization tasks. I will also use library lubridate to convert date variable into date data type.
+
+```{r}
+library(lubridate)
+library(tidyverse)
+```
+### Data Analysis Objective
+This data analysis tries to answer the questions how gender, age group and hour of the day relate to being victim of shooting incidents occurred in New York.
+
+
+### Import Dataset
+The dataset for this project was retrieved from https://catalog.data.gov/dataset. The observations represent the shooting incidents in different areas of New York over multiple years from 2006 to 2021.
+The link of the dataset is given below:
+(https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic).I read the dataset from web using built-in function read.csv().
+
+
+```{r}
+#reading data from csv file
+
+NYPD_Shooting_Incident_Data__Historic <- read.csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+View(NYPD_Shooting_Incident_Data__Historic)
+
+nypd <- data.frame(NYPD_Shooting_Incident_Data__Historic) 
+summary(nypd)
+```
+
+### Tidy and Transform
+
+In this section, few variables of interest from the set of available variables are selected . These variables are gender, age, group and hour. The variable hour is extracted from the variable OCCUR_TIME. Because the selected variable are categorical, they are converted to factor data type.
+
+```{r}
+#converting OCCUR_DATE to date data type
+library(lubridate)
+library('hms')
+
+data <- nypd %>% select(OCCUR_DATE,OCCUR_TIME, VIC_AGE_GROUP,VIC_SEX) %>% na.omit()
+data$OCCUR_DATE <- mdy(data$OCCUR_DATE)
+data$year <- year(data$OCCUR_DATE)
+data$month <-month(data$OCCUR_DATE)
+data$day <-day(data$OCCUR_DATE)
+data$hour<-hour(parse_time(data$OCCUR_TIME))
+
+
+data$year <- factor(data$year)
+data$month <- factor(data$month)
+data$day <- factor(data$day)
+data$hour <- factor(data$hour)
+
+data$gender <- factor(data$VIC_SEX)
+data$age <- factor(data$VIC_AGE_GROUP)
+
+```
+
+The variables of interest are, OCCUR_TIME, VIC_SEX and VIC_AGE_GROUP. so I will select only these columns from data.
+
+
+```{r}
+#selecting variables of interest
+subData <- data%>%
+  select(OCCUR_TIME, VIC_SEX, VIC_AGE_GROUP)
+
+#checking null values in selected data
+colSums(is.na(subData))
+```
+
+From above output, it is pretty evident that there is no null values in the dataset which means the dataset is already cleaned.
+
+```{r}
+#summary of data
+summary(subData)
+glimpse(subData)
+
+```
+
+### Visualizations
+
+In this section three visualizations are created. The first visualization depicts the distribution of being victim of shooting for different age groups. The second visualization shows the number of shooting that victimize males versus females. The last visualization shows the number of shootings for different hours in a day.
+
+```{r}
+#plotting distribution of incidents by the victims'Age Group
+ggplot(data=data, aes(x=age))+ geom_bar(fill='lightblue')+
+labs(title='Number of Shooting Incidents Victimize Different Age Groups', x='Age Group', y='Number of Shootings') +
+theme(plot.title = element_text(hjust = 0.5,size=10)
+, axis.title =element_text(hjust = 0.5,size=9) )
+```
+
+
+The above plot represents the distribution of number of shootings by the victim's Age group. From above plot, it can be seen that most number of shooting incidents occurred in the Age group between 25 and 44 years. Least number of shootings occurred in the Adults of  between 45 to 64 years old. 
+
+
+
+In the second chart you can see how is the number of shooting distributions related to Gender.
+```{r}
+##plotting distribution of incidents by Gender
+ggplot(data=data, aes(x=gender))+geom_bar(fill='lightblue')+
+labs(title='Number of Shooting Incidents that victimize \n Males versus Females' ,x='Gender'
+,y='Number of Shootings') +
+theme(plot.title = element_text(hjust = 0.5,size=9)
+, axis.title =element_text(hjust = 0.5,size=8))
+```
+The above plot represents the distribution of shooting incidents by Gender. It shows that vast majority of victims in shooting incidents are Males.
+
+
+In the third plot you can see how the hour of the day correlates with the number of shootings.
+The plot clearly shows that during the daylight number of shootings drastically decreases. In majority of the days, the peak hour when we see the maximum number of shooting is in the hour between 11pm and 12am.
+```{r}
+ggplot(data=data, aes(x=hour))+geom_bar(fill='lightblue')+
+labs(title='Number of Shooting Incidents for Different Hours in the Day' ,x='Hour'
+,y='Number of Shootings') +
+theme(plot.title = element_text(hjust = 0.5,size=14)
+, axis.title =element_text(hjust = 0.5,size=11) )
+
+```
+
+
+
+Since both variables are categorical, I will use Chi-Squared test of independence for checking is there any association between perpetrators and gender of victims.
+The null and alternative hypotheses for Chi-Squared test of dependence are given below:
+H0: There is no association between between perpetrators and gender of victims.
+Ha: There is a significant association between between perpetrators and gender of victims.
+The significance level alpha = 0.05.
+
+```{r, warning=FALSE}
+#implementing chi square test
+sex <- nypd %>% select(VIC_SEX,PERP_SEX)
+chisq.test(table(sex$VIC_SEX,sex$PERP_SEX),simulate.p.value = T)
+#Pearson’s Chi-squared test with simulated p-value (based on 2000 ## replicates)
+```
+
+### Conclusion
+Above output shows that the p-value is less than significance level alpha = 0.05, so I reject the null hypotheses and conclude that there is a significant association between perpetrators and gender of victims.
+
+### Modeling
+In this section, a multiple linear regression model is fitted on the sliced data and the result is interpreted
+```{r}
+data_agg <- data %>% group_by(gender,age,hour ) %>% summarise(count = n())
+lm(count~gender+age+hour,data = data_agg)
+```
+
+According to the result, variable for Males (genderM), 23:00PM-24:00PM (hour23) , age group between 25-44 (age25-44) have highest positive coefficients and this imply these variables are positively correlated with the number of shooting incidents
+
+
+### Conclusion and Potential Source of Bias
+In this project, the data for historic shooting incidence in New York was studied. It turned out that age group between 25 to 44 was more exposed to those shooting incidents compared to other groups. In addition, the shooting between 11:00 PM to 12:00 PM is high probable in comparison to other hours in a day. Moreover, Males are much more expected to be victim of shooting than females.
+One potential source of bias could be the distribution of different age groups in the place that data was recorded. If one age group has the largest fraction of the population in a certain area, then it is rational for that group to have highest number of shooting victims in the data and this does not necessarily mean that shooters, in general, are more inclined to victimize this age group comparing to other age groups. 
+Also, this data is provided by NYPD  and not independent sources which might be another potential source of bias. This of course is not confirmed. But in general, it is a good practice data to be collected by an independent third party.
+
+
+
+
